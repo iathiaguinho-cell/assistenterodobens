@@ -1,0 +1,257 @@
+!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+    <title>thIAguinho Pace Pro NAV</title>
+    <!-- Bibliotecas de Mapa (Leaflet.js) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&family=Orbitron:wght@900&display=swap" rel="stylesheet">
+    <style>
+        html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; background-color: #0c0a09; }
+        body { font-family: 'Roboto Mono', monospace; touch-action: manipulation; }
+        .display-font { font-family: 'Orbitron', sans-serif; }
+        #app-container { position: relative; z-index: 1000; pointer-events: none; }
+        #app-container > * { pointer-events: auto; }
+        #map { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+        .leaflet-control-attribution, .leaflet-control-zoom { display: none; }
+        
+        .bg-pace-ok { background-color: #10B981; } .text-pace-ok { color: #10B981; }
+        .bg-pace-fast { background-color: #EF4444; } .text-pace-fast { color: #EF4444; }
+        .bg-pace-slow { background-color: #3B82F6; } .text-pace-slow { color: #3B82F6; }
+        .bg-pace-standby { background-color: #4B5563; } .text-pace-standby { color: #6B7280; }
+        @keyframes slideInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .tactic-card-animation { animation: slideInUp 0.6s ease-out forwards; }
+        button { -webkit-tap-highlight-color: transparent; }
+    </style>
+</head>
+<body class="antialiased">
+
+    <div id="map"></div>
+
+    <div id="app-container" class="flex flex-col h-full p-4 max-w-md mx-auto w-full justify-end">
+        <div id="metrics-panel" class="bg-stone-900/80 backdrop-blur-sm p-4 rounded-2xl border border-stone-700 w-full">
+            
+            <div class="grid grid-cols-2 gap-4 w-full text-center mb-3">
+                <div>
+                    <p class="text-sm md:text-md text-gray-400">RITMO ATUAL</p>
+                    <p id="current-pace" class="text-4xl md:text-5xl display-font text-pace-standby">--:--</p>
+                </div>
+                <div>
+                    <p class="text-sm md:text-md text-gray-400">STATUS</p>
+                    <p id="pace-status-text" class="text-4xl md:text-5xl display-font text-pace-standby">---</p>
+                </div>
+            </div>
+
+            <div id="tactic-card" class="w-full bg-stone-800/50 p-3 rounded-lg border border-stone-700">
+                 <div class="text-center">
+                    <p class="text-xs text-gray-500">ESTRATÉGIA KM <span id="current-km-label" class="display-font">1</span></p>
+                    <p id="tactic-instruction" class="text-sm md:text-base text-amber-400 mt-1 font-bold"></p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4 w-full text-center mt-3">
+                <div>
+                    <p class="text-sm md:text-md text-gray-400">TEMPO</p>
+                    <p id="elapsed-time" class="text-3xl md:text-4xl display-font">00:00:00</p>
+                </div>
+                <div>
+                    <p class="text-sm md:text-md text-gray-400">DISTÂNCIA</p>
+                    <p id="distance" class="text-3xl md:text-4xl display-font">0.00 <span class="text-lg md:text-xl text-gray-500">km</span></p>
+                </div>
+            </div>
+
+            <p id="status" class="text-amber-400 h-6 mt-3 text-center text-sm">Aguardando início...</p>
+            
+            <div id="controls" class="flex justify-center gap-4 mt-2">
+                <button id="start-btn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-lg text-xl shadow-lg transition-transform transform active:scale-95">
+                    INICIAR
+                </button>
+                <button id="pause-btn" class="w-1/2 bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 px-6 rounded-lg text-xl shadow-lg hidden transition-transform transform active:scale-95">
+                    PAUSAR
+                </button>
+                <button id="stop-btn" class="w-1/2 bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg text-xl shadow-lg hidden transition-transform transform active:scale-95">
+                    PARAR
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- DADOS DA ROTA (VERSÃO DE ALTA FIDELIDADE) ---
+        const routeCoordinates = [
+            [-20.82586, -49.39003], [-20.82512, -49.38959], [-20.82419, -49.38914], [-20.8225, -49.38827], 
+            [-20.82098, -49.38753], [-20.81938, -49.38676], [-20.81788, -49.38608], [-20.81643, -49.3854], 
+            [-20.81498, -49.38473], [-20.81342, -49.38402], [-20.8118, -49.38328], [-20.81057, -49.38269], 
+            [-20.80931, -49.38198], [-20.8082, -49.38127], [-20.80735, -49.38073], [-20.80665, -49.38011], 
+            [-20.8059, -49.37923], [-20.80556, -49.37841], [-20.8052, -49.37748], [-20.80514, -49.37637], 
+            [-20.80544, -49.37549], [-20.80608, -49.37463], [-20.8074, -49.37367], [-20.80854, -49.37302], 
+            [-20.80976, -49.37243], [-20.81093, -49.37194], [-20.8122, -49.37145], [-20.8134, -49.37111], 
+            [-20.81457, -49.37118], [-20.81534, -49.3716], [-20.81591, -49.37225], [-20.81635, -49.37307], 
+            [-20.8167, -49.37397], [-20.81705, -49.37492], [-20.81744, -49.37583], [-20.81804, -49.3767], 
+            [-20.81902, -49.37761], [-20.82035, -49.37834], [-20.82173, -49.37887], [-20.82312, -49.37937], 
+            [-20.82424, -49.37993], [-20.82502, -49.38043], [-20.82555, -49.38111], [-20.82583, -49.38183], 
+            [-20.82596, -49.38263], [-20.826, -49.38346], [-20.82591, -49.38435], [-20.82563, -49.38528], 
+            [-20.82512, -49.38622], [-20.82435, -49.38711], [-20.82333, -49.38794], [-20.82216, -49.38871], 
+            [-20.82098, -49.38943], [-20.81997, -49.38994], [-20.81923, -49.39023], [-20.81896, -49.39028]
+        ];
+
+        const racePlan = [
+            { minPace: 315, maxPace: 325, tactic: "Controle a euforia. Use a gravidade." },
+            { minPace: 320, maxPace: 330, tactic: "Mantenha o controle. Ache seu ritmo." },
+            { minPace: 325, maxPace: 335, tactic: "Firme o ritmo. Sinta-se confortável." },
+            { minPace: 340, maxPace: 350, tactic: "Absorva a subida. Encurte a passada." },
+            { minPace: 330, maxPace: 340, tactic: "Recupere o ritmo. Respire fundo." },
+            { minPace: 310, maxPace: 320, tactic: "Ganhe tempo! Solte o corpo." },
+            { minPace: 310, maxPace: 320, tactic: "Mantenha a velocidade. Prepare a mente." },
+            { minPace: 335, maxPace: 345, tactic: "A batalha começa. Calma e esforço." },
+            { minPace: 350, maxPace: 365, tactic: "Força mental! Use os braços." },
+            { minPace: 325, maxPace: 345, tactic: "Sprint Final! Aumente a frequência!" }
+        ];
+
+        const map = L.map('map', { zoomControl: false }).setView(routeCoordinates[0], 15);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
+        }).addTo(map);
+
+        const routePolyline = L.polyline(routeCoordinates, { color: '#FBBF24', weight: 5, opacity: 0.8 }).addTo(map);
+        map.fitBounds(routePolyline.getBounds().pad(0.1));
+
+        const runnerIcon = L.divIcon({
+            className: 'runner-icon',
+            html: '<div class="w-4 h-4 bg-blue-400 rounded-full border-2 border-white shadow-lg animate-pulse"></div>',
+            iconSize: [16, 16],
+            iconAnchor: [8, 8]
+        });
+        const runnerMarker = L.marker(routeCoordinates[0], { icon: runnerIcon }).addTo(map);
+        
+        let state = 'stopped';
+        let watchId = null, startTime = 0, pausedTime = 0, totalPausedTime = 0;
+        let totalDistance = 0, currentKm = 0;
+        let positions = [];
+        let mainInterval = null;
+
+        const ui = {
+            currentPace: document.getElementById('current-pace'),
+            paceStatusText: document.getElementById('pace-status-text'),
+            tacticInstruction: document.getElementById('tactic-instruction'),
+            currentKmLabel: document.getElementById('current-km-label'),
+            elapsedTime: document.getElementById('elapsed-time'),
+            distance: document.getElementById('distance'),
+            status: document.getElementById('status'),
+            startBtn: document.getElementById('start-btn'),
+            pauseBtn: document.getElementById('pause-btn'),
+            stopBtn: document.getElementById('stop-btn'),
+        };
+
+        function formatTime(seconds) {
+            const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
+            const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
+            const s = Math.floor(seconds % 60).toString().padStart(2, '0');
+            return `${h}:${m}:${s}`;
+        }
+
+        function formatPace(secondsPerKm) {
+            if (!isFinite(secondsPerKm) || secondsPerKm <= 0) return '--:--';
+            const minutes = Math.floor(secondsPerKm / 60).toString();
+            const seconds = Math.floor(secondsPerKm % 60).toString().padStart(2, '0');
+            return `${minutes}:${seconds}`;
+        }
+        
+        function haversineDistance(coords1, coords2) {
+            const toRad = x => x * Math.PI / 180;
+            const R = 6371e3;
+            const dLat = toRad(coords2.latitude - coords1.latitude);
+            const dLon = toRad(coords2.longitude - coords1.longitude);
+            const lat1 = toRad(coords1.latitude);
+            const lat2 = toRad(coords2.latitude);
+            const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c;
+        }
+
+        function handlePosition(position) {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            runnerMarker.setLatLng([lat, lng]);
+            map.setView([lat, lng], 16, { animate: true, pan: { duration: 1 } });
+            
+            if (positions.length > 0) {
+                totalDistance += haversineDistance(positions[positions.length - 1].coords, position.coords);
+            }
+            positions.push(position);
+        }
+        
+        function updateDisplay() {
+            const elapsedSeconds = (Date.now() - startTime - totalPausedTime) / 1000;
+            ui.elapsedTime.textContent = formatTime(elapsedSeconds);
+            ui.distance.innerHTML = `${(totalDistance / 1000).toFixed(2)} <span class="text-lg md:text-xl text-gray-500">km</span>`;
+
+            const newKm = Math.floor(totalDistance / 1000);
+            if(newKm !== currentKm) {
+                currentKm = newKm;
+                const plan = racePlan[Math.min(currentKm, racePlan.length - 1)];
+                ui.currentKmLabel.textContent = currentKm + 1;
+                ui.tacticInstruction.textContent = plan.tactic;
+            }
+
+            if (positions.length > 1) {
+                const lastPos = positions[positions.length - 1];
+                const prevPos = positions[positions.length - 2];
+                const dist = haversineDistance(prevPos.coords, lastPos.coords);
+                const timeDiff = (lastPos.timestamp - prevPos.timestamp) / 1000;
+                if (dist > 0 && timeDiff > 0) {
+                    const currentPaceSeconds = (timeDiff / dist) * 1000;
+                    ui.currentPace.textContent = formatPace(currentPaceSeconds);
+                    
+                    const plan = racePlan[Math.min(currentKm, racePlan.length - 1)];
+                    if (currentPaceSeconds < plan.minPace) {
+                        ui.paceStatusText.textContent = "RÁPIDO";
+                        ui.paceStatusText.className = "text-4xl md:text-5xl display-font text-pace-fast";
+                    } else if (currentPaceSeconds > plan.maxPace) {
+                        ui.paceStatusText.textContent = "LENTO";
+                        ui.paceStatusText.className = "text-4xl md:text-5xl display-font text-pace-slow";
+                    } else {
+                        ui.paceStatusText.textContent = "NO ALVO";
+                        ui.paceStatusText.className = "text-4xl md:text-5xl display-font text-pace-ok";
+                    }
+                }
+            }
+        }
+        
+        function startRun() {
+             if (state === 'stopped') {
+                startTime = Date.now();
+                totalPausedTime = 0;
+                totalDistance = 0;
+                currentKm = 0;
+                positions = [];
+                const plan = racePlan[0];
+                ui.currentKmLabel.textContent = 1;
+                ui.tacticInstruction.textContent = plan.tactic;
+             } else if (state === 'paused') {
+                totalPausedTime += Date.now() - pausedTime;
+             }
+             
+             state = 'running';
+             ui.status.textContent = 'GPS OK. Correndo...';
+             watchId = navigator.geolocation.watchPosition(handlePosition, console.error, { enableHighAccuracy: true });
+             mainInterval = setInterval(updateDisplay, 1000);
+             ui.startBtn.classList.add('hidden');
+             ui.pauseBtn.classList.remove('hidden');
+             ui.stopBtn.classList.remove('hidden');
+        }
+
+        ui.startBtn.addEventListener('click', startRun);
+
+    </script>
+</body>
+</html>
+
+
+
