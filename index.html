@@ -1,10 +1,9 @@
-!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <title>thIAguinho Pace Pro NAV</title>
-    <!-- Bibliotecas de Mapa (Leaflet.js) -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     
@@ -28,14 +27,18 @@
         @keyframes slideInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
         .tactic-card-animation { animation: slideInUp 0.6s ease-out forwards; }
         button { -webkit-tap-highlight-color: transparent; }
+         .runner-icon div {
+            width: 16px; height: 16px; background-color: #60A5FA; border-radius: 50%;
+            border: 2px solid #FFFFFF; box-shadow: 0 0 10px #60A5FA;
+        }
     </style>
 </head>
-<body class="antialiased">
+<body class="antialiased text-stone-200">
 
     <div id="map"></div>
 
     <div id="app-container" class="flex flex-col h-full p-4 max-w-md mx-auto w-full justify-end">
-        <div id="metrics-panel" class="bg-stone-900/80 backdrop-blur-sm p-4 rounded-2xl border border-stone-700 w-full">
+        <div id="metrics-panel" class="bg-stone-900/80 backdrop-blur-sm p-4 rounded-2xl border border-stone-700 w-full tactic-card-animation">
             
             <div class="grid grid-cols-2 gap-4 w-full text-center mb-3">
                 <div>
@@ -51,7 +54,7 @@
             <div id="tactic-card" class="w-full bg-stone-800/50 p-3 rounded-lg border border-stone-700">
                  <div class="text-center">
                     <p class="text-xs text-gray-500">ESTRATÉGIA KM <span id="current-km-label" class="display-font">1</span></p>
-                    <p id="tactic-instruction" class="text-sm md:text-base text-amber-400 mt-1 font-bold"></p>
+                    <p id="tactic-instruction" class="text-sm md:text-base text-amber-400 mt-1 font-bold h-10 flex items-center justify-center"></p>
                 </div>
             </div>
 
@@ -83,175 +86,453 @@
     </div>
 
     <script>
-        // --- DADOS DA ROTA (VERSÃO DE ALTA FIDELIDADE) ---
-        const routeCoordinates = [
-            [-20.82586, -49.39003], [-20.82512, -49.38959], [-20.82419, -49.38914], [-20.8225, -49.38827], 
-            [-20.82098, -49.38753], [-20.81938, -49.38676], [-20.81788, -49.38608], [-20.81643, -49.3854], 
-            [-20.81498, -49.38473], [-20.81342, -49.38402], [-20.8118, -49.38328], [-20.81057, -49.38269], 
-            [-20.80931, -49.38198], [-20.8082, -49.38127], [-20.80735, -49.38073], [-20.80665, -49.38011], 
-            [-20.8059, -49.37923], [-20.80556, -49.37841], [-20.8052, -49.37748], [-20.80514, -49.37637], 
-            [-20.80544, -49.37549], [-20.80608, -49.37463], [-20.8074, -49.37367], [-20.80854, -49.37302], 
-            [-20.80976, -49.37243], [-20.81093, -49.37194], [-20.8122, -49.37145], [-20.8134, -49.37111], 
-            [-20.81457, -49.37118], [-20.81534, -49.3716], [-20.81591, -49.37225], [-20.81635, -49.37307], 
-            [-20.8167, -49.37397], [-20.81705, -49.37492], [-20.81744, -49.37583], [-20.81804, -49.3767], 
-            [-20.81902, -49.37761], [-20.82035, -49.37834], [-20.82173, -49.37887], [-20.82312, -49.37937], 
-            [-20.82424, -49.37993], [-20.82502, -49.38043], [-20.82555, -49.38111], [-20.82583, -49.38183], 
-            [-20.82596, -49.38263], [-20.826, -49.38346], [-20.82591, -49.38435], [-20.82563, -49.38528], 
-            [-20.82512, -49.38622], [-20.82435, -49.38711], [-20.82333, -49.38794], [-20.82216, -49.38871], 
-            [-20.82098, -49.38943], [-20.81997, -49.38994], [-20.81923, -49.39023], [-20.81896, -49.39028]
-        ];
+    // ===================================================================================
+    // ARQUITETURA DO SISTEMA DE CORRIDA - v2.1 (FINAL)
+    // ===================================================================================
 
-        const racePlan = [
-            { minPace: 315, maxPace: 325, tactic: "Controle a euforia. Use a gravidade." },
-            { minPace: 320, maxPace: 330, tactic: "Mantenha o controle. Ache seu ritmo." },
-            { minPace: 325, maxPace: 335, tactic: "Firme o ritmo. Sinta-se confortável." },
-            { minPace: 340, maxPace: 350, tactic: "Absorva a subida. Encurte a passada." },
-            { minPace: 330, maxPace: 340, tactic: "Recupere o ritmo. Respire fundo." },
-            { minPace: 310, maxPace: 320, tactic: "Ganhe tempo! Solte o corpo." },
-            { minPace: 310, maxPace: 320, tactic: "Mantenha a velocidade. Prepare a mente." },
-            { minPace: 335, maxPace: 345, tactic: "A batalha começa. Calma e esforço." },
-            { minPace: 350, maxPace: 365, tactic: "Força mental! Use os braços." },
-            { minPace: 325, maxPace: 345, tactic: "Sprint Final! Aumente a frequência!" }
-        ];
+    // --- DADOS GPX INTEGRADOS ---
+    const gpxData = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx creator="strava.com" version="1.1" xmlns="http://www.topografix.com/GPX/1/1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">
+ <metadata>
+  <name>Rodobens </name>
+  <author>
+   <name>Tiago C.</name>
+   <link href="https://www.strava.com/athletes/13813939"/>
+  </author>
+ </metadata>
+ <trk>
+  <name>Rodobens </name>
+  <type>1</type>
+  <trkseg>
+   <trkpt lat="-20.8258600" lon="-49.3900300">
+    <ele>449.6</ele>
+   </trkpt>
+   <trkpt lat="-20.8251200" lon="-49.3895900">
+    <ele>448.2</ele>
+   </trkpt>
+   <trkpt lat="-20.8241900" lon="-49.3891400">
+    <ele>446.5</ele>
+   </trkpt>
+   <trkpt lat="-20.8225000" lon="-49.3882700">
+    <ele>443.2</ele>
+   </trkpt>
+   <trkpt lat="-20.8209800" lon="-49.3875300">
+    <ele>440.4</ele>
+   </trkpt>
+   <trkpt lat="-20.8193800" lon="-49.3867600">
+    <ele>437.5</ele>
+   </trkpt>
+   <trkpt lat="-20.8178800" lon="-49.3860800">
+    <ele>435.3</ele>
+   </trkpt>
+   <trkpt lat="-20.8164300" lon="-49.3854000">
+    <ele>433.0</ele>
+   </trkpt>
+   <trkpt lat="-20.8149800" lon="-49.3847300">
+    <ele>430.7</ele>
+   </trkpt>
+   <trkpt lat="-20.8134200" lon="-49.3840200">
+    <ele>428.3</ele>
+   </trkpt>
+   <trkpt lat="-20.8118000" lon="-49.3832800">
+    <ele>426.2</ele>
+   </trkpt>
+   <trkpt lat="-20.8105700" lon="-49.3826900">
+    <ele>424.8</ele>
+   </trkpt>
+   <trkpt lat="-20.8093100" lon="-49.3819800">
+    <ele>423.5</ele>
+   </trkpt>
+   <trkpt lat="-20.8082000" lon="-49.3812700">
+    <ele>422.5</ele>
+   </trkpt>
+   <trkpt lat="-20.8073500" lon="-49.3807300">
+    <ele>421.9</ele>
+   </trkpt>
+   <trkpt lat="-20.8066500" lon="-49.3801100">
+    <ele>421.5</ele>
+   </trkpt>
+   <trkpt lat="-20.8059000" lon="-49.3792300">
+    <ele>421.5</ele>
+   </trkpt>
+   <trkpt lat="-20.8055600" lon="-49.3784100">
+    <ele>421.9</ele>
+   </trkpt>
+   <trkpt lat="-20.8052000" lon="-49.3774800">
+    <ele>422.6</ele>
+   </trkpt>
+   <trkpt lat="-20.8051400" lon="-49.3763700">
+    <ele>423.7</ele>
+   </trkpt>
+   <trkpt lat="-20.8054400" lon="-49.3754900">
+    <ele>424.9</ele>
+   </trkpt>
+   <trkpt lat="-20.8060800" lon="-49.3746300">
+    <ele>426.6</ele>
+   </trkpt>
+   <trkpt lat="-20.8074000" lon="-49.3736700">
+    <ele>429.2</ele>
+   </trkpt>
+   <trkpt lat="-20.8085400" lon="-49.3730200">
+    <ele>431.1</ele>
+   </trkpt>
+   <trkpt lat="-20.8097600" lon="-49.3724300">
+    <ele>432.9</ele>
+   </trkpt>
+   <trkpt lat="-20.8109300" lon="-49.3719400">
+    <ele>434.6</ele>
+   </trkpt>
+   <trkpt lat="-20.8122000" lon="-49.3714500">
+    <ele>436.4</ele>
+   </trkpt>
+   <trkpt lat="-20.8134000" lon="-49.3711100">
+    <ele>437.9</ele>
+   </trkpt>
+   <trkpt lat="-20.8145700" lon="-49.3711800">
+    <ele>438.8</ele>
+   </trkpt>
+   <trkpt lat="-20.8153400" lon="-49.3716000">
+    <ele>439.3</ele>
+   </trkpt>
+   <trkpt lat="-20.8159100" lon="-49.3722500">
+    <ele>439.7</ele>
+   </trkpt>
+   <trkpt lat="-20.8163500" lon="-49.3730700">
+    <ele>440.0</ele>
+   </trkpt>
+   <trkpt lat="-20.8167000" lon="-49.3739700">
+    <ele>440.2</ele>
+   </trkpt>
+   <trkpt lat="-20.8170500" lon="-49.3749200">
+    <ele>440.4</ele>
+   </trkpt>
+   <trkpt lat="-20.8174400" lon="-49.3758300">
+    <ele>440.7</ele>
+   </trkpt>
+   <trkpt lat="-20.8180400" lon="-49.3767000">
+    <ele>441.2</ele>
+   </trkpt>
+   <trkpt lat="-20.8190200" lon="-49.3776100">
+    <ele>442.2</ele>
+   </trkpt>
+   <trkpt lat="-20.8203500" lon="-49.3783400">
+    <ele>443.6</ele>
+   </trkpt>
+   <trkpt lat="-20.8217300" lon="-49.3788700">
+    <ele>445.3</ele>
+   </trkpt>
+   <trkpt lat="-20.8231200" lon="-49.3793700">
+    <ele>447.1</ele>
+   </trkpt>
+   <trkpt lat="-20.8242400" lon="-49.3799300">
+    <ele>448.5</ele>
+   </trkpt>
+   <trkpt lat="-20.8250200" lon="-49.3804300">
+    <ele>449.4</ele>
+   </trkpt>
+   <trkpt lat="-20.8255500" lon="-49.3811100">
+    <ele>450.2</ele>
+   </trkpt>
+   <trkpt lat="-20.8258300" lon="-49.3818300">
+    <ele>450.7</ele>
+   </trkpt>
+   <trkpt lat="-20.8259600" lon="-49.3826300">
+    <ele>451.2</ele>
+   </trkpt>
+   <trkpt lat="-20.8260000" lon="-49.3834600">
+    <ele>451.7</ele>
+   </trkpt>
+   <trkpt lat="-20.8259100" lon="-49.3843500">
+    <ele>452.1</ele>
+   </trkpt>
+   <trkpt lat="-20.8256300" lon="-49.3852800">
+    <ele>452.3</ele>
+   </trkpt>
+   <trkpt lat="-20.8251200" lon="-49.3862200">
+    <ele>452.3</ele>
+   </trkpt>
+   <trkpt lat="-20.8243500" lon="-49.3871100">
+    <ele>452.1</ele>
+   </trkpt>
+   <trkpt lat="-20.8233300" lon="-49.3879400">
+    <ele>451.7</ele>
+   </trkpt>
+   <trkpt lat="-20.8221600" lon="-49.3887100">
+    <ele>451.1</ele>
+   </trkpt>
+   <trkpt lat="-20.8209800" lon="-49.3894300">
+    <ele>450.3</ele>
+   </trkpt>
+   <trkpt lat="-20.8199700" lon="-49.3899400">
+    <ele>449.6</ele>
+   </trkpt>
+   <trkpt lat="-20.8192300" lon="-49.3902300">
+    <ele>449.4</ele>
+   </trkpt>
+   <trkpt lat="-20.8189600" lon="-49.3902800">
+    <ele>449.3</ele>
+   </trkpt>
+  </trkseg>
+ </trk>
+</gpx>`;
 
-        const map = L.map('map', { zoomControl: false }).setView(routeCoordinates[0], 15);
+    // --- ESTRATÉGIA DE PROVA (DADOS DE CONFIGURAÇÃO) ---
+    // Pace em segundos por quilômetro. Ex: 5:30/km = 330s
+    const racePlan = [
+        { km: 1, tactic: "CONTROLE! Use a descida, não force. Corrida solta.", minPace: 315, maxPace: 325 }, // 5:15 - 5:25
+        { km: 2, tactic: "Mantenha o controle. Encontre seu ritmo de cruzeiro.", minPace: 320, maxPace: 330 }, // 5:20 - 5:30
+        { km: 3, tactic: "Terreno plano. Ritmo firme e confortável. Cheque o corpo.", minPace: 325, maxPace: 335 }, // 5:25 - 5:35
+        { km: 4, tactic: "PRIMEIRA SUBIDA. Absorva. Encurte a passada, use os braços.", minPace: 340, maxPace: 350 }, // 5:40 - 5:50
+        { km: 5, tactic: "Recupere o ritmo de cruzeiro. Respire fundo.", minPace: 330, maxPace: 340 }, // 5:30 - 5:40
+        { km: 6, tactic: "DESCIDA. Solte as pernas! Ganhe tempo aqui. Deixe fluir.", minPace: 310, maxPace: 320 }, // 5:10 - 5:20
+        { km: 7, tactic: "Aproveite a descida. Mantenha a velocidade sem esforço extra.", minPace: 310, maxPace: 320 }, // 5:10 - 5:20
+        { km: 8, tactic: "Prepare a mente. A subida final começa. Controle o esforço.", minPace: 335, maxPace: 345 }, // 5:35 - 5:45
+        { km: 9, tactic: "SUBIDA DECISIVA! Foco na força. Postura erguida. VOCÊ TREINOU PRA ISSO!", minPace: 350, maxPace: 365 }, // 5:50 - 6:05
+        { km: 10, tactic: "O PIOR JÁ PASSOU! Use a energia que guardou. DÊ TUDO ATÉ O FIM!", minPace: 0, maxPace: 345 } // < 5:45
+    ];
+
+    // --- MOTOR DO APLICATIVO (NÃO ALTERAR) ---
+    const ui = {
+        currentPace: document.getElementById('current-pace'),
+        paceStatusText: document.getElementById('pace-status-text'),
+        tacticInstruction: document.getElementById('tactic-instruction'),
+        currentKmLabel: document.getElementById('current-km-label'),
+        elapsedTime: document.getElementById('elapsed-time'),
+        distance: document.getElementById('distance'),
+        status: document.getElementById('status'),
+        startBtn: document.getElementById('start-btn'),
+        pauseBtn: document.getElementById('pause-btn'),
+        stopBtn: document.getElementById('stop-btn'),
+    };
+    
+    let map, routePolyline, runnerMarker;
+    let state = 'stopped';
+    let watchId = null, startTime = 0, pausedTime = 0, totalPausedTime = 0;
+    let totalDistance = 0, currentKmInteger = 0;
+    let positions = [];
+    let mainInterval = null;
+    let routeCoordinates = [];
+
+    function parseGPX(gpxStr) {
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(gpxStr, "text/xml");
+        const trackpoints = xmlDoc.getElementsByTagName('trkpt');
+        if (trackpoints.length === 0) {
+            console.error("Nenhum ponto de rota (trkpt) encontrado no arquivo GPX.");
+            return [];
+        }
+        const coords = [];
+        for (let i = 0; i < trackpoints.length; i++) {
+            const lat = parseFloat(trackpoints[i].getAttribute('lat'));
+            const lon = parseFloat(trackpoints[i].getAttribute('lon'));
+            coords.push([lat, lon]);
+        }
+        return coords;
+    }
+
+    function initializeMap() {
+        if (!routeCoordinates || routeCoordinates.length === 0) {
+            ui.status.textContent = "Erro: Dados da rota não carregados.";
+            // Ponto de fallback para o mapa não quebrar
+            const fallbackCoords = [-20.82586, -49.39003];
+            map = L.map('map', { zoomControl: false }).setView(fallbackCoords, 15);
+        } else {
+            map = L.map('map', { zoomControl: false }).setView(routeCoordinates[0], 15);
+        }
+
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
             attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
         }).addTo(map);
-
-        const routePolyline = L.polyline(routeCoordinates, { color: '#FBBF24', weight: 5, opacity: 0.8 }).addTo(map);
-        map.fitBounds(routePolyline.getBounds().pad(0.1));
+        
+        if (routeCoordinates.length > 0) {
+            routePolyline = L.polyline(routeCoordinates, { color: '#FBBF24', weight: 5, opacity: 0.8 }).addTo(map);
+            map.fitBounds(routePolyline.getBounds().pad(0.1));
+        }
 
         const runnerIcon = L.divIcon({
             className: 'runner-icon',
-            html: '<div class="w-4 h-4 bg-blue-400 rounded-full border-2 border-white shadow-lg animate-pulse"></div>',
+            html: '<div></div>',
             iconSize: [16, 16],
             iconAnchor: [8, 8]
         });
-        const runnerMarker = L.marker(routeCoordinates[0], { icon: runnerIcon }).addTo(map);
         
-        let state = 'stopped';
-        let watchId = null, startTime = 0, pausedTime = 0, totalPausedTime = 0;
-        let totalDistance = 0, currentKm = 0;
-        let positions = [];
-        let mainInterval = null;
+        const initialPosition = routeCoordinates.length > 0 ? routeCoordinates[0] : [-20.82586, -49.39003];
+        runnerMarker = L.marker(initialPosition, { icon: runnerIcon }).addTo(map);
+    }
+    
+    function haversineDistance(coords1, coords2) {
+        const R = 6371; // Raio da Terra em km
+        const dLat = (coords2.latitude - coords1.latitude) * Math.PI / 180;
+        const dLon = (coords2.longitude - coords1.longitude) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                  Math.cos(coords1.latitude * Math.PI / 180) * Math.cos(coords2.latitude * Math.PI / 180) *
+                  Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c; // Distância em km
+    }
 
-        const ui = {
-            currentPace: document.getElementById('current-pace'),
-            paceStatusText: document.getElementById('pace-status-text'),
-            tacticInstruction: document.getElementById('tactic-instruction'),
-            currentKmLabel: document.getElementById('current-km-label'),
-            elapsedTime: document.getElementById('elapsed-time'),
-            distance: document.getElementById('distance'),
-            status: document.getElementById('status'),
-            startBtn: document.getElementById('start-btn'),
-            pauseBtn: document.getElementById('pause-btn'),
-            stopBtn: document.getElementById('stop-btn'),
-        };
+    function formatTime(totalSeconds) {
+        const hours = Math.floor(totalSeconds / 3600).toString().padStart(2, '0');
+        const minutes = Math.floor((totalSeconds % 3600) / 60).toString().padStart(2, '0');
+        const seconds = (totalSeconds % 60).toString().padStart(2, '0');
+        return `${hours}:${minutes}:${seconds}`;
+    }
 
-        function formatTime(seconds) {
-            const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
-            const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
-            const s = Math.floor(seconds % 60).toString().padStart(2, '0');
-            return `${h}:${m}:${s}`;
+    function formatPace(secondsPerKm) {
+        if (isNaN(secondsPerKm) || !isFinite(secondsPerKm) || secondsPerKm === 0) {
+            return '--:--';
         }
+        const minutes = Math.floor(secondsPerKm / 60);
+        const seconds = Math.round(secondsPerKm % 60).toString().padStart(2, '0');
+        return `${minutes}:${seconds}`;
+    }
 
-        function formatPace(secondsPerKm) {
-            if (!isFinite(secondsPerKm) || secondsPerKm <= 0) return '--:--';
-            const minutes = Math.floor(secondsPerKm / 60).toString();
-            const seconds = Math.floor(secondsPerKm % 60).toString().padStart(2, '0');
-            return `${minutes}:${seconds}`;
-        }
+    function handlePosition(position) {
+        const { latitude, longitude } = position.coords;
+        runnerMarker.setLatLng([latitude, longitude]);
+        map.setView([latitude, longitude], 17, { animate: true, pan: { duration: 1 } });
         
-        function haversineDistance(coords1, coords2) {
-            const toRad = x => x * Math.PI / 180;
-            const R = 6371e3;
-            const dLat = toRad(coords2.latitude - coords1.latitude);
-            const dLon = toRad(coords2.longitude - coords1.longitude);
-            const lat1 = toRad(coords1.latitude);
-            const lat2 = toRad(coords2.latitude);
-            const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-            return R * c;
+        const newPosition = { coords: { latitude, longitude }, timestamp: position.timestamp };
+        if (positions.length > 0) {
+            const lastPosition = positions[positions.length - 1];
+            totalDistance += haversineDistance(lastPosition.coords, newPosition.coords);
         }
+        positions.push(newPosition);
+    }
 
-        function handlePosition(position) {
-            const lat = position.coords.latitude;
-            const lng = position.coords.longitude;
-            runnerMarker.setLatLng([lat, lng]);
-            map.setView([lat, lng], 16, { animate: true, pan: { duration: 1 } });
-            
-            if (positions.length > 0) {
-                totalDistance += haversineDistance(positions[positions.length - 1].coords, position.coords);
-            }
-            positions.push(position);
+    function updateDisplay() {
+        if (state !== 'running') return;
+
+        const elapsedTimeInSeconds = Math.floor((Date.now() - startTime - totalPausedTime) / 1000);
+        ui.elapsedTime.textContent = formatTime(elapsedTimeInSeconds);
+        ui.distance.textContent = totalDistance.toFixed(2);
+
+        // --- Lógica de Pace e Status ---
+        let currentPaceInSeconds = 0;
+        if (positions.length > 1 && totalDistance > 0) {
+            const lastTwoPositions = positions.slice(-2);
+            const dist = haversineDistance(lastTwoPositions[0].coords, lastTwoPositions[1].coords) * 1000; // em metros
+            const time = (lastTwoPositions[1].timestamp - lastTwoPositions[0].timestamp) / 1000; // em segundos
+            const speed = dist / time; // m/s
+            currentPaceInSeconds = speed > 0 ? 1000 / speed : 0; // s/km
         }
+        ui.currentPace.textContent = formatPace(currentPaceInSeconds);
         
-        function updateDisplay() {
-            const elapsedSeconds = (Date.now() - startTime - totalPausedTime) / 1000;
-            ui.elapsedTime.textContent = formatTime(elapsedSeconds);
-            ui.distance.innerHTML = `${(totalDistance / 1000).toFixed(2)} <span class="text-lg md:text-xl text-gray-500">km</span>`;
+        // --- Lógica da Estratégia ---
+        currentKmInteger = Math.floor(totalDistance) + 1;
+        const currentPlan = racePlan.find(p => p.km === currentKmInteger);
+        
+        if (currentPlan) {
+            ui.currentKmLabel.textContent = currentKmInteger;
+            ui.tacticInstruction.textContent = currentPlan.tactic;
 
-            const newKm = Math.floor(totalDistance / 1000);
-            if(newKm !== currentKm) {
-                currentKm = newKm;
-                const plan = racePlan[Math.min(currentKm, racePlan.length - 1)];
-                ui.currentKmLabel.textContent = currentKm + 1;
-                ui.tacticInstruction.textContent = plan.tactic;
-            }
-
-            if (positions.length > 1) {
-                const lastPos = positions[positions.length - 1];
-                const prevPos = positions[positions.length - 2];
-                const dist = haversineDistance(prevPos.coords, lastPos.coords);
-                const timeDiff = (lastPos.timestamp - prevPos.timestamp) / 1000;
-                if (dist > 0 && timeDiff > 0) {
-                    const currentPaceSeconds = (timeDiff / dist) * 1000;
-                    ui.currentPace.textContent = formatPace(currentPaceSeconds);
-                    
-                    const plan = racePlan[Math.min(currentKm, racePlan.length - 1)];
-                    if (currentPaceSeconds < plan.minPace) {
-                        ui.paceStatusText.textContent = "RÁPIDO";
-                        ui.paceStatusText.className = "text-4xl md:text-5xl display-font text-pace-fast";
-                    } else if (currentPaceSeconds > plan.maxPace) {
-                        ui.paceStatusText.textContent = "LENTO";
-                        ui.paceStatusText.className = "text-4xl md:text-5xl display-font text-pace-slow";
-                    } else {
-                        ui.paceStatusText.textContent = "NO ALVO";
-                        ui.paceStatusText.className = "text-4xl md:text-5xl display-font text-pace-ok";
-                    }
+            if (currentPaceInSeconds > 0) {
+                if (currentPaceInSeconds < currentPlan.minPace) {
+                    ui.paceStatusText.textContent = "RÁPIDO";
+                    ui.paceStatusText.className = "text-4xl md:text-5xl display-font text-pace-fast";
+                    ui.currentPace.className = "text-4xl md:text-5xl display-font text-pace-fast";
+                } else if (currentPaceInSeconds > currentPlan.maxPace) {
+                    ui.paceStatusText.textContent = "LENTO";
+                    ui.paceStatusText.className = "text-4xl md:text-5xl display-font text-pace-slow";
+                    ui.currentPace.className = "text-4xl md:text-5xl display-font text-pace-slow";
+                } else {
+                    ui.paceStatusText.textContent = "IDEAL";
+                    ui.paceStatusText.className = "text-4xl md:text-5xl display-font text-pace-ok";
+                    ui.currentPace.className = "text-4xl md:text-5xl display-font text-pace-ok";
                 }
             }
+        } else {
+             ui.tacticInstruction.textContent = "PROVA CONCLUÍDA! PARABÉNS!";
+        }
+    }
+
+    function startRun() {
+        if (state === 'stopped') {
+            startTime = Date.now();
+            totalPausedTime = 0;
+            totalDistance = 0;
+            positions = [];
+            resetUI(true);
+            const firstPlan = racePlan[0];
+            ui.currentKmLabel.textContent = firstPlan.km;
+            ui.tacticInstruction.textContent = firstPlan.tactic;
+        } else if (state === 'paused') {
+            totalPausedTime += Date.now() - pausedTime;
         }
         
-        function startRun() {
-             if (state === 'stopped') {
-                startTime = Date.now();
-                totalPausedTime = 0;
-                totalDistance = 0;
-                currentKm = 0;
-                positions = [];
-                const plan = racePlan[0];
-                ui.currentKmLabel.textContent = 1;
-                ui.tacticInstruction.textContent = plan.tactic;
-             } else if (state === 'paused') {
-                totalPausedTime += Date.now() - pausedTime;
-             }
-             
-             state = 'running';
-             ui.status.textContent = 'GPS OK. Correndo...';
-             watchId = navigator.geolocation.watchPosition(handlePosition, console.error, { enableHighAccuracy: true });
-             mainInterval = setInterval(updateDisplay, 1000);
-             ui.startBtn.classList.add('hidden');
-             ui.pauseBtn.classList.remove('hidden');
-             ui.stopBtn.classList.remove('hidden');
+        state = 'running';
+        ui.status.textContent = 'GPS OK. Correndo...';
+        ui.startBtn.classList.add('hidden');
+        ui.pauseBtn.classList.remove('hidden');
+        ui.stopBtn.classList.remove('hidden');
+
+        watchId = navigator.geolocation.watchPosition(handlePosition, 
+            (err) => { 
+                console.error(err);
+                ui.status.textContent = `Erro no GPS: ${err.message}`;
+            }, 
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+        mainInterval = setInterval(updateDisplay, 1000);
+    }
+
+    function pauseRun() {
+        if (state !== 'running') return;
+        state = 'paused';
+        pausedTime = Date.now();
+        clearInterval(mainInterval);
+        navigator.geolocation.clearWatch(watchId);
+        ui.status.textContent = 'Pausado.';
+        ui.pauseBtn.classList.add('hidden');
+        ui.startBtn.classList.remove('hidden');
+        ui.startBtn.textContent = 'RETOMAR';
+    }
+    
+    function stopRun() {
+        state = 'stopped';
+        clearInterval(mainInterval);
+        if (watchId) navigator.geolocation.clearWatch(watchId);
+        ui.status.textContent = 'Corrida finalizada. Pronto para a próxima.';
+        ui.startBtn.classList.remove('hidden');
+        ui.startBtn.textContent = 'INICIAR';
+        ui.pauseBtn.classList.add('hidden');
+        ui.stopBtn.classList.add('hidden');
+    }
+
+    function resetUI(isStarting = false) {
+        if (!isStarting) {
+            ui.elapsedTime.textContent = '00:00:00';
+            ui.distance.textContent = '0.00';
+            ui.status.textContent = 'Aguardando início...';
         }
-
+        ui.currentPace.textContent = '--:--';
+        ui.currentPace.className = "text-4xl md:text-5xl display-font text-pace-standby";
+        ui.paceStatusText.textContent = '---';
+        ui.paceStatusText.className = "text-4xl md:text-5xl display-font text-pace-standby";
+        ui.currentKmLabel.textContent = '1';
+        ui.tacticInstruction.textContent = '';
+    }
+    
+    // --- INICIALIZAÇÃO ---
+    document.addEventListener('DOMContentLoaded', () => {
         ui.startBtn.addEventListener('click', startRun);
-
+        ui.pauseBtn.addEventListener('click', pauseRun);
+        ui.stopBtn.addEventListener('click', stopRun);
+        
+        if (gpxData && gpxData.trim() !== '') {
+            routeCoordinates = parseGPX(gpxData);
+            if (routeCoordinates.length > 0) {
+                 ui.status.textContent = "Rota carregada. Pronto.";
+            } else {
+                 ui.status.textContent = "GPX inválido. Carregando rota de fallback.";
+            }
+        } else {
+            ui.status.textContent = "Nenhum GPX. Insira os dados da rota.";
+        }
+        
+        initializeMap();
+        resetUI();
+    });
     </script>
 </body>
 </html>
-
-
-
