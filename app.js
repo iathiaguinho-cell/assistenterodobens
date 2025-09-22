@@ -1,0 +1,158 @@
+// Variáveis globais para armazenar os dados
+let allParticipants = [];
+const rankingsData = {};
+
+// URL segura onde os dados dos atletas estão hospedados
+const dataUrl = 'https://gist.githubusercontent.com/anonymous/5a42080a2738b8159f816c4f826e7bb4/raw/corrida_rodobens_data.json';
+
+// Função principal que é executada quando a página carrega
+window.addEventListener('DOMContentLoaded', () => {
+    fetch(dataUrl)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Falha na rede ao buscar dados.');
+            }
+            return response.json();
+        })
+        .then(data => {
+            allParticipants = data;
+            buildRankingsData();
+            updateStats();
+            document.querySelector('#results .no-results-icon').textContent = '🔍';
+            document.querySelector('#results .no-results').innerHTML = 'Digite o nome de um atleta para ver seus resultados detalhados e ranking da sua categoria.';
+        })
+        .catch(error => {
+            console.error('Falha ao carregar os dados dos atletas:', error);
+            document.getElementById('results').innerHTML = '<div class="no-results"><div class="no-results-icon">⚠️</div>Falha ao carregar dados. Verifique sua conexão com a internet e tente recarregar a página.</div>';
+        });
+});
+
+// Constrói a estrutura de dados para os rankings de forma otimizada
+function buildRankingsData() {
+    allParticipants.forEach(p => {
+        const { distancia, categoria, genero, faixa_etaria_5_anos } = p;
+        if (!rankingsData[distancia]) rankingsData[distancia] = {};
+        if (!rankingsData[distancia][categoria]) rankingsData[distancia][categoria] = {};
+        if (!rankingsData[distancia][categoria][genero]) rankingsData[distancia][categoria][genero] = {};
+        if (!rankingsData[distancia][categoria][genero][faixa_etaria_5_anos]) {
+            rankingsData[distancia][categoria][genero][faixa_etaria_5_anos] = [];
+        }
+        rankingsData[distancia][categoria][genero][faixa_etaria_5_anos].push({
+            nome: p.nome,
+            numero: p.numero,
+            colocacao_faixa_etaria: p.colocacao_faixa_etaria,
+            tempo: p.tempo_liquido.split('.')[0],
+            equipe: p.equipe
+        });
+    });
+
+    for (const dist in rankingsData) {
+        for (const cat in rankingsData[dist]) {
+            for (const gen in rankingsData[dist][cat]) {
+                for (const faixa in rankingsData[dist][cat][gen]) {
+                    rankingsData[dist][cat][gen][faixa].sort((a, b) => a.colocacao_faixa_etaria - b.colocacao_faixa_etaria);
+                }
+            }
+        }
+    }
+}
+
+// Atualiza os cartões de estatísticas no topo da página
+function updateStats() {
+    const total = allParticipants.length;
+    const masculino = allParticipants.filter(p => p.genero === 'Masculino').length;
+    const feminino = allParticipants.filter(p => p.genero === 'Feminino').length;
+    document.getElementById('totalParticipants').textContent = total;
+    document.getElementById('masculino').textContent = masculino;
+    document.getElementById('feminino').textContent = feminino;
+    document.getElementById('finalizaram').textContent = total;
+}
+
+// Filtra os atletas com base no termo de busca
+function searchAthletes() {
+    const searchTerm = document.getElementById('searchInput').value.toLowerCase().trim();
+    if (!searchTerm) {
+        showNoResults();
+        return;
+    }
+    let filteredParticipants = allParticipants.filter(p => p.nome.toLowerCase().includes(searchTerm));
+    displayResults(filteredParticipants, searchTerm);
+}
+
+// Gera os "badges" de pódio
+function getPositionBadge(position) {
+    if (position === 1) return '<span class="position-badge gold">🥇 1º</span>';
+    if (position === 2) return '<span class="position-badge silver">🥈 2º</span>';
+    if (position === 3) return '<span class="position-badge bronze">🥉 3º</span>';
+    if (position <= 10) return `<span class="position-badge top10">Top 10</span>`;
+    return `<span class="position-badge other">${position}º</span>`;
+}
+
+// Gera a seção de ranking para um atleta específico
+function generateAthleteRanking(athlete) {
+    const { distancia, categoria, genero, faixa_etaria_5_anos } = athlete;
+    if (!rankingsData[distancia]?.[categoria]?.[genero]) {
+        return '<p>Ranking não disponível para esta categoria.</p>';
+    }
+    const categoryData = rankingsData[distancia][categoria][genero];
+    const categoryTitle = `${distancia} - ${categoria} - ${genero}`;
+    let html = `<div class="ranking-section"><div class="ranking-header"><h2>🏆 Ranking da Categoria</h2><p>Classificação específica do atleta pesquisado</p></div><div class="category-title">${categoryTitle}</div>`;
+    
+    const sortedAgeGroups = Object.keys(categoryData).sort((a, b) => parseInt(a.split('-')[0]) - parseInt(b.split('-')[0]));
+    
+    sortedAgeGroups.forEach(ageGroup => {
+        const athletesInGroup = categoryData[ageGroup];
+        if (athletesInGroup.length > 0) {
+            const ageDisplay = ageGroup.replace('-', ' a ') + ' anos';
+            const isAthleteGroup = ageGroup === faixa_etaria_5_anos;
+            html += `<div class="age-group-section ${isAthleteGroup ? 'athlete-highlight' : ''}"><div class="age-group-title">${ageDisplay} (${athletesInGroup.length} atletas) ${isAthleteGroup ? ' - 🎯 SUA FAIXA ETÁRIA' : ''}</div><table class="ranking-table"><thead><tr><th class="position">Pos.</th><th>Nome</th><th>Número</th><th>Tempo</th><th>Equipe</th></tr></thead><tbody>`;
+            const athletesToShow = isAthleteGroup ? athletesInGroup : athletesInGroup.slice(0, 10);
+            athletesToShow.forEach((a) => {
+                const isSearchedAthlete = a.numero === athlete.numero;
+                const rowClass = isSearchedAthlete ? 'highlight-athlete' : '';
+                html += `<tr class="${rowClass}" ${isSearchedAthlete ? '' : `onclick="showSingleAthlete(${a.numero})" style="cursor: pointer;"`}><td class="position">${a.colocacao_faixa_etaria}º ${isSearchedAthlete ? getPositionBadge(a.colocacao_faixa_etaria) : ''}</td><td class="name">${a.nome} ${isSearchedAthlete ? ' 👤' : ''}</td><td>#${a.numero}</td><td class="time">${a.tempo}</td><td>${a.equipe || 'Individual'}</td></tr>`;
+            });
+            if (!isAthleteGroup && athletesInGroup.length > 10) {
+                html += `<tr><td colspan="5" style="text-align: center; color: #6c757d; font-style: italic;">... e mais ${athletesInGroup.length - 10} atletas</td></tr>`;
+            }
+            html += `</tbody></table></div>`;
+        }
+    });
+    html += '</div>';
+    return html;
+}
+
+// Exibe os resultados na tela (atleta único ou lista de opções)
+function displayResults(participants, searchTerm) {
+    const resultsDiv = document.getElementById('results');
+    if (participants.length === 0) {
+        resultsDiv.innerHTML = `<div class="no-results"><div class="no-results-icon">😔</div>Nenhum resultado encontrado para "${searchTerm}".</div>`;
+        return;
+    }
+    if (participants.length === 1) {
+        const athlete = participants[0];
+        resultsDiv.innerHTML = `<div class="athlete-info"><h2>🏃‍♂️ Informações Detalhadas do Atleta</h2><div class="athlete-details"><div class="detail-item"><div class="detail-label">Nome</div><div class="detail-value">${athlete.nome}</div></div><div class="detail-item"><div class="detail-label">Número</div><div class="detail-value">${athlete.numero}</div></div><div class="detail-item"><div class="detail-label">Colocação Geral (${athlete.distancia})</div><div class="detail-value">${athlete.colocacao_geral}º</div></div><div class="detail-item"><div class="detail-label">Colocação no Gênero</div><div class="detail-value">${athlete.colocacao_sexo}º</div></div><div class="detail-item"><div class="detail-label">Colocação na Faixa Etária</div><div class="detail-value" style="color: #e74c3c; font-weight: bold;">${athlete.colocacao_faixa_etaria}º de ${athlete.total_faixa_etaria} (${athlete.faixa_etaria_5_anos} anos) ${getPositionBadge(athlete.colocacao_faixa_etaria)}</div></div><div class="detail-item"><div class="detail-label">Tempo Líquido</div><div class="detail-value">${athlete.tempo_liquido.split('.')[0]}</div></div><div class="detail-item"><div class="detail-label">Pace (min/km)</div><div class="detail-value">${athlete.pace}</div></div><div class="detail-item"><div class="detail-label">Distância</div><div class="detail-value">${athlete.distancia}</div></div><div class="detail-item"><div class="detail-label">Categoria</div><div class="detail-value">${athlete.categoria}</div></div><div class="detail-item"><div class="detail-label">Gênero</div><div class="detail-value">${athlete.genero}</div></div><div class="detail-item"><div class="detail-label">Equipe</div><div class="detail-value">${athlete.equipe || 'Individual'}</div></div></div></div>${generateAthleteRanking(athlete)}`;
+    } else {
+        resultsDiv.innerHTML = `<div class="multiple-options"><h2>🔍 Resultados Encontrados (${participants.length})</h2><p>Clique em um atleta para ver seus detalhes e ranking da categoria:</p><div class="athletes-list">${participants.map(athlete => `<div class="athlete-option" onclick="showSingleAthlete(${athlete.numero})"><div class="athlete-header"><div class="athlete-name">${athlete.nome}</div><div class="athlete-number">#${athlete.numero}</div></div><div class="athlete-details-small">${athlete.distancia} - ${athlete.categoria} - ${athlete.genero}</div><div class="athlete-result">Geral: ${athlete.colocacao_geral}º | Gênero: ${athlete.colocacao_sexo}º | Faixa Etária: <span style="color: #e74c3c;">${athlete.colocacao_faixa_etaria}º de ${athlete.total_faixa_etaria}</span> | Tempo: ${athlete.tempo_liquido.split('.')[0]}</div><div class="athlete-team">${athlete.equipe || 'Individual'} | ${athlete.faixa_etaria_5_anos} anos</div></div>`).join('')}</div></div>`;
+    }
+}
+
+function showSingleAthlete(numero) {
+    const athlete = allParticipants.find(p => p.numero === numero);
+    if (athlete) {
+        displayResults([athlete], athlete.nome);
+        document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+    }
+}
+
+function showNoResults() {
+    document.getElementById('results').innerHTML = `<div class="no-results"><div class="no-results-icon">🔍</div>Digite o nome de um atleta para ver seus resultados detalhados e ranking da sua categoria.</div>`;
+}
+
+// Adiciona os "escutadores" de eventos para a busca
+document.getElementById('searchButton').addEventListener('click', searchAthletes);
+document.getElementById('searchInput').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        searchAthletes();
+    }
+});
