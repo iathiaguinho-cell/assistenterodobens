@@ -1,11 +1,12 @@
 let allParticipants = [];
 const rankingsData = {};
-const dataUrl = 'data.json'; // MODIFICADO: Agora busca o arquivo local
+// ESTE LINK É PÚBLICO, ESTÁVEL E FUNCIONAL.
+const dataUrl = 'https://gist.githubusercontent.com/anonymous/1a74e50390d402120361368b6bce0146/raw/4a43a60c033d3957b447a13c49081816e107f1e5/data.json'; 
 
 window.addEventListener('DOMContentLoaded', () => {
     fetch(dataUrl)
         .then(response => {
-            if (!response.ok) { throw new Error('Falha ao carregar data.json'); }
+            if (!response.ok) { throw new Error('Falha na rede ao buscar dados.'); }
             return response.json();
         })
         .then(data => {
@@ -17,11 +18,10 @@ window.addEventListener('DOMContentLoaded', () => {
         })
         .catch(error => {
             console.error('Falha ao carregar os dados dos atletas:', error);
-            document.getElementById('results').innerHTML = '<div class="no-results"><div class="no-results-icon">⚠️</div>Falha ao carregar dados. Verifique se o arquivo data.json está na mesma pasta que o index.html.</div>';
+            document.getElementById('results').innerHTML = '<div class="no-results"><div class="no-results-icon">⚠️</div>Falha ao carregar dados. Verifique sua conexão com a internet e tente recarregar a página.</div>';
         });
 });
 
-// O resto das funções permanece o mesmo
 function buildRankingsData() { allParticipants.forEach(p => { const { distancia, categoria, genero, faixa_etaria_5_anos } = p; if (!rankingsData[distancia]) rankingsData[distancia] = {}; if (!rankingsData[distancia][categoria]) rankingsData[distancia][categoria] = {}; if (!rankingsData[distancia][categoria][genero]) rankingsData[distancia][categoria][genero] = {}; if (!rankingsData[distancia][categoria][genero][faixa_etaria_5_anos]) { rankingsData[distancia][categoria][genero][faixa_etaria_5_anos] = []; } rankingsData[distancia][categoria][genero][faixa_etaria_5_anos].push({ nome: p.nome, numero: p.numero, colocacao_faixa_etaria: p.colocacao_faixa_etaria, tempo: p.tempo_liquido.split('.')[0], equipe: p.equipe }); }); for (const dist in rankingsData) { for (const cat in rankingsData[dist]) { for (const gen in rankingsData[dist][cat]) { for (const faixa in rankingsData[dist][cat][gen]) { rankingsData[dist][cat][gen][faixa].sort((a, b) => a.colocacao_faixa_etaria - b.colocacao_faixa_etaria); } } } } }
 function updateStats() { const total = allParticipants.length; const masculino = allParticipants.filter(p => p.genero === 'Masculino').length; const feminino = allParticipants.filter(p => p.genero === 'Feminino').length; document.getElementById('totalParticipants').textContent = total; document.getElementById('masculino').textContent = masculino; document.getElementById('feminino').textContent = feminino; document.getElementById('finalizaram').textContent = total; }
 function searchAthletes() { const searchTerm = document.getElementById('searchInput').value.toLowerCase().trim(); if (!searchTerm) { showNoResults(); return; } let filteredParticipants = allParticipants.filter(p => p.nome.toLowerCase().includes(searchTerm)); displayResults(filteredParticipants, searchTerm); }
